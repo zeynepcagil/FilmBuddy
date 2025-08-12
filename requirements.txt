@@ -1,0 +1,15 @@
+pandas==2.2.2
+langchain==0.1.20
+langchain-community==0.0.38
+langchain-core==0.1.52
+langchain-huggingface==0.0.3
+chromadb==0.4.24
+sentence-transformers==2.7.0
+transformers==4.40.2
+torch==2.3.0
+huggingface-hub==0.23.0
+requests==2.31.0
+g4f==0.2.1.9
+tiktoken==0.7.0
+pydantic==2.7.1
+typing-extensions==4.12.0
