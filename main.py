@@ -1,16 +1,16 @@
 # main.py
 from data_handler import DataLoader
-from llm_model import Gpt4FreeLLM
+from llm_model import CustomLLM, Gpt4FreeLLM
 from rag_system import RagSystem
 import warnings
 
-
+# Generate content
 warnings.filterwarnings("ignore", category=DeprecationWarning, module='langchain')
 
 if __name__ == "__main__":
-    csv_path = "doc/Top_Anime_data.csv"
+    csv_path = "doc/n_movies.csv"
 
-    openai_api_token = "YOUR API KEY"
+    openai_api_token = "Your API Token"
     data_loader = DataLoader(csv_path)
     documents = data_loader.load_data()
 

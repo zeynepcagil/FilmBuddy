@@ -5,6 +5,7 @@ from langchain_core.language_models import LLM
 from typing import Optional, List
 import g4f
 import warnings
+
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
 
@@ -40,7 +41,6 @@ class CustomLLM(LLM):
             response = requests.post(self.base_url, headers=headers, json=payload)
             if response.status_code == 200:
                 data = response.json()
-                # OpenAI ChatCompletion yanıtı
                 if "choices" in data and len(data["choices"]) > 0:
                     return data["choices"][0]["message"]["content"]
                 else:
@@ -104,6 +104,9 @@ class Gpt4FreeLLM(LLM):
             "gpt-4",
             "gemini-1.5-pro",
             "claude-3-sonnet",
+            "mistral-instruct",
+            "gemini-2",
+            "gpt-neo-2.7b",
         ]
 
         async def run_all():
@@ -126,3 +129,5 @@ class Gpt4FreeLLM(LLM):
     @property
     def _identifying_params(self) -> dict:
         return {}
+
+

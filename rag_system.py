@@ -81,9 +81,9 @@ class RagSystem:
             weights=[0.5, 0.5]
         )
 
-        # 4️⃣ MultiQueryRetriever opsiyonel
+        # 4️⃣ MultiQueryRetriever
         if self.use_multiquery:
-            retriever_prompt_template = """Sen yardımcı bir asistanısın. Kullanıcının Türkçe sorusunu alıp, benzer ENGLISH arama sorguları üret.
+            retriever_prompt_template = """Sen yardımcı bir asistanısın. Kullanıcının Türkçe sorusunu alıp, benzer dökümanın dilinde arama sorguları üret.
 Sadece liste halinde soruları yaz, başka metin yazma.
 
 Soru: {question}
