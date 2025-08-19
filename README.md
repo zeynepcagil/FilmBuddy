@@ -1,117 +1,134 @@
-# 📚 Knowledge Scout
+📚 Knowledge Scout
 
-**Knowledge Scout** is a Python project that processes data from CSV or TXT files, stores them in a vector database, and answers your questions using **RAG (Retrieval-Augmented Generation)** architecture. It offers a flexible structure with chat history management, custom prompt design, and support for multiple LLMs.
+**Knowledge Scout**, RAG (Retrieval-Augmented Generation) mimarisiyle çalışan, Türkçe dil desteğine sahip bir soru-cevap sistemidir. CSV veya TXT dosyalarından veri işler, vektör veritabanında saklar ve kullanıcının sorularına yapay zeka destekli yanıtlar üretir. Sistemin en önemli özelliklerinden biri, daha doğru sonuçlar için **niyet sınıflandırma** yapması ve performans takibi için **dahili bir sayaç** içermesidir.
 
-## ⚙️ Features
+⚙️ Özellikler
 
-* **Multi-format data loading** — Support for `.csv` and `.txt` files
-* **LangChain integration** for document processing and chunking
-* **HuggingFace Embeddings** for vector generation
-* **ChromaDB** for persistent vector storage
-* **MultiQueryRetriever** for improved search results
-* **Gpt4FreeLLM** or **CustomLLM** options
-* **Chat history clearing** functionality
-* **Fully interactive terminal-based usage**
+* **Çoklu Veri Formatı Desteği:** `.csv` ve `.txt` dosyalarını okuyabilir.
+* **Akıllı Niyet Sınıflandırma:** Kullanıcının amacını (`öneri`, `arama`, `gerçek` gibi) analiz ederek daha odaklı ve isabetli yanıtlar sağlar.
+* **LLM Kullanım Sayacı:** Her LLM çağrısını sayarak sistemin performansını ve maliyetini takip etmenize olanak tanır.
+* **LangChain Entegrasyonu:** Doküman işleme, parçalara ayırma ve tüm RAG zincirini yönetmek için kullanılır.
+* **HuggingFace Embeddings:** Verileri vektörlere dönüştürerek hızlı ve alakalı arama yapılmasını sağlar.
+* **ChromaDB:** Vektörleri kalıcı olarak saklayan hafif ve etkili bir veritabanıdır.
+* **EnsembleRetriever:** Hem anlamsal (Chroma) hem de anahtar kelime tabanlı (BM25) aramayı birleştirerek sonuçların kalitesini artırır.
+* **Esnek LLM Yapısı:** Ücretsiz modellere erişim sağlayan **Gpt4FreeLLM** ve OpenAI API'si ile çalışan **CustomLLM** seçenekleri bulunur.
+* **Sohbet Geçmişi Yönetimi:** Diyalog boyunca bağlamı korur ve istenildiğinde geçmişi temizleme komutu sunar.
+* **Tam Etkileşimli Kullanım:** Komut satırı arayüzü sayesinde kolay ve hızlı bir deneyim sunar.
 
-## 📂 Project Structure
+📂 Proje Yapısı
 
-```bash
+```
 knowledge-scout/
 │
-├── data_handler.py     # DataLoader class — Data loading and Document creation
-├── rag_system.py       # RagSystem class — RAG pipeline creation and querying
-├── llm_model.py        # Gpt4FreeLLM and CustomLLM classes
-├── main.py             # Entry point — CLI-based usage
-├── requirements.txt    # Dependencies
+├── data_handler.py      # Veri yükleme ve Doküman oluşturma
+├── llm_model.py         # LLM'leri yönetir ve sayaç içerir
+├── counter.py           # Performans metriklerini takip eden Counter sınıfı
+├── rag_system.py        # RAG hattını ve niyet sınıflandırma mantığını barındırır
+├── main.py              # Uygulamanın ana giriş noktası
+├── requirements.txt     # Proje bağımlılıkları
 └── doc/
-    └── Top_Anime_data.csv
+    └── n_movies.csv     # Örnek veri dosyası
 ```
 
-## 🛠 Installation
+🛠 Kurulum
 
-1. **Clone the project**
-
+1. **Projeyi klonlayın:**
 ```bash
 git clone https://github.com/zeynepcagil/knowledge-scout.git
 cd knowledge-scout
 ```
 
-2. **Install dependencies**
-
+2. **Gereklilikleri yükleyin:**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **(Optional) Set up OpenAI API key**
-   If you want to use `CustomLLM`:
-
+3. **(İsteğe Bağlı) OpenAI API anahtarınızı ayarlayın:** `CustomLLM` kullanmak isterseniz `main.py` içindeki ilgili satırı güncelleyin.
 ```python
-openai_api_token = "YOUR_API_KEY"  # inside main.py
+openai_api_token = "SİZİN_API_ANAHTARINIZ"
 ```
 
-## 🚀 Usage
+🚀 Kullanım
 
-1. **Run the main file**
-
+1. **Ana dosyayı çalıştırın:**
 ```bash
 python main.py
 ```
 
-2. **Using with default file**
-   The project uses the `doc/Top_Anime_data.csv` file by default.
+2. **Kendi verinizi kullanmak için:** `main.py` dosyasındaki `csv_path` değişkenini kendi `.csv` veya `.txt` dosyanızın yoluna göre değiştirin.
+3. **Komutlar:**
+   * `q`: Programdan çıkış yapar.
+   * `temizle`: Sohbet geçmişini sıfırlar.
+   * Diğer tüm girdiler sisteme soru olarak gönderilir.
 
-3. **To use your own data**
-   * Change the line in `main.py`:
-
-```python
-csv_path = "doc/Top_Anime_data.csv"
-```
-
-   to your own `.csv` or `.txt` file path.
-
-4. **Commands**
-   * `q` → Exit the program
-   * `temizle` → Clear chat history
-   * All other inputs are sent as questions to the system.
-
-## 🧩 Components
-
-### **1. DataLoader**
-* Reads `.csv` and `.txt` files
-* Converts rows or entire text into `Document` objects
-* In CSV loading, each row is saved with metadata (headers, row index)
-
-### **2. RagSystem**
-* Splits documents into chunks (`RecursiveCharacterTextSplitter`)
-* Vectorizes using HuggingFace Embeddings
-* Stores in ChromaDB
-* Generates richer queries with MultiQueryRetriever
-* Includes custom Turkish-English translation-supported search prompt
-* Manages chat history with `ConversationBufferWindowMemory`
-
-### **3. LLM Models**
-* **Gpt4FreeLLM** — Free model access through g4f library
-* **CustomLLM** — OpenAI API compatible request sending
-
-### **4. main.py**
-* Manages the flow: Data loading → RAG pipeline initialization → CLI question asking
-
-## 📌 Example Usage
+📌 Örnek Kullanım
 
 ```bash
-Enter your question: What is the release year of Naruto?
-Answer: 2002
+Sorunuzu giriniz: film öner
+Asistan: Harika! Bir film/dizi önerisi arıyorsunuz. Nasıl bir türde istersiniz? Mesela, 'aksiyon filmi' ya da 'romantik komedi' gibi.
+--- LLM çağrı sayısı: 1
+Sorunuzu giriniz: romantik komedi
+Asistan: 2018'den sonra çıkan romantik komediler arasında ne tür bir konu arıyorsunuz?
+--- LLM çağrı sayısı: 2
 ```
 
-```bash
-Enter your question: temizle
-Chat Geçmiş temizlendi.
+---
+
+## Detaylı Kullanım Örneği
+
+```
+New g4f version available: 0.6.0.2 (current: 0.6.0.1) | pip install -U g4f
+
+Sorunuzu giriniz: canım sıkkın bana film öner
+Debug - Yeniden yazılan sorgu: movies
+Asistan: Hangi tür filmlerden hoşlanırsınız?
+---
+Toplam LLM çağrısı: 1
+Toplam token kullanımı: 705 (Giriş: 594, Çıkış: 111)
+
+Sorunuzu giriniz: komedi filmlerinden hoşlanırım
+Debug - Yeniden yazılan sorgu: comedy movies
+Asistan: Bağlamda belirtilen bilgilere göre, komedi türünde iki film bulunmaktadır:
+1. **Jim Gaffigan: Cinco**  
+   - **Yıl:** 2017  
+   - **Tür:** Komedi  
+   - **Süre:** 73 dakika  
+   - **Rating:** 7.1  
+2. **The Hall: Honoring the Greats of Stand-Up**  
+   - **Yıl:** 2022  
+   - **Tür:** Komedi  
+   - **Süre:** 70 dakika  
+   - **Rating:** 6.3  
+Bu filmler komedi türüne uygun olarak önerilebilir.
+---
+Toplam LLM çağrısı: 3
+Toplam token kullanımı: 2845 (Giriş: 2496, Çıkış: 349)
+
+Sorunuzu giriniz: the hallın konusu ne
+Debug - Yeniden yazılan sorgu: The Hall: Honoring the Greats of Stand-Up plot
+Asistan: "The Hall: Honoring the Greats of Stand-Up" filminin konusu, stand-up komedi alanında büyük başarılar elde etmiş isimleri onurlandırmak ve komedi severleri bir araya getirmek üzerine kuruludur. Film, bu alanda öne çıkan komedyenlerin katkılarını kutlar ve izleyicilere bir kutlama atmosferi sunar.
+---
+Toplam LLM çağrısı: 6
+Toplam token kullanımı: 5747 (Giriş: 5188, Çıkış: 559)
+
+Sorunuzu giriniz: puanı kaç
+Debug - Yeniden yazılan sorgu: The Hall: Honoring the Greats of Stand-Up rating
+Asistan: "The Hall: Honoring the Greats of Stand-Up" filminin ratingi 6.3'tür.
+---
+Toplam LLM çağrısı: 9
+Toplam token kullanımı: 8684 (Giriş: 7990, Çıkış: 694)
+
+Sorunuzu giriniz: q
+Uygulamadan çıkılıyor.
+Process finished with exit code 0
 ```
 
-## 🤝 Contributing
+---
 
-To contribute:
-1. Create a fork
-2. Create a new branch
-3. Commit your changes
-4. Send a pull request
+🤝 Katkıda Bulunma
+
+Projeye katkıda bulunmak için:
+1. Bir `fork` oluşturun.
+2. Yeni bir `branch` açın.
+3. Değişikliklerinizi `commit`'leyin.
+4. Bir `pull request` gönderin.
