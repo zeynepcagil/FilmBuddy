@@ -11,6 +11,7 @@ from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
+from classifiers.sentence_transformer_classifier import SentenceTransformerClassifier  # Yeni import
 
 os.environ["CHROMA_TELEMETRY_SETTINGS"] = '{"anonymized_telemetry": false}'
 
@@ -23,7 +24,8 @@ class RagSystem:
         self.qa_chain = None
         self.retriever = None
         self.memory = None
-
+        self.classifier = SentenceTransformerClassifier()  # Yeni eklenen sınıf
+        self.conversation_history = []
         # Dinamik soru sorma için temel kısıtlamalar ve sorular
         self.default_clarifications = [
             "Hangi türde film/dizi arıyorsunuz?",
@@ -161,6 +163,29 @@ class RagSystem:
         if not self.qa_chain:
             return {"result": "Sistem şu an hazır değil, lütfen bekleyin."}
 
+        # Tekrarlayan soru kontrolü
+        chat_history_list = self.memory.chat_memory.messages
+        past_queries = [msg.content for msg in chat_history_list if msg.type == "human"]
+
+        if past_queries:
+            self.classifier.set_labels(past_queries)
+            # Eşik değeri biraz daha düşürülebilir, 0.7 gibi bir değer daha esnek olabilir.
+            classification_result = self.classifier.classify(query, threshold=0.7)
+
+            if classification_result['label'] != 'diğer' and classification_result['score'] > 0.7:
+                matched_query = classification_result['label']
+
+                matched_response = ""
+                for i in range(len(chat_history_list)):
+                    if chat_history_list[i].type == "human" and chat_history_list[i].content == matched_query:
+                        if i + 1 < len(chat_history_list) and chat_history_list[i + 1].type == "ai":
+                            matched_response = chat_history_list[i + 1].content
+                            break
+
+                if matched_response:
+                    return {"result": f"Bu soruyu zaten sormuştunuz. Eski cevabım: {matched_response}"}
+
+        # Eğer benzer soru bulunmazsa, normal akışı takip et
         try:
             chat_history_str = self._get_chat_history_as_string()
             intent_response_str = self.llm.invoke(
@@ -218,6 +243,10 @@ class RagSystem:
         if "Üzgünüm, aradığınız bilgiye elimdeki verilerle ulaşamıyorum" in result:
             return {
                 "result": "Aradığınız kriterlere uygun bir film bulamadım. Başka bir tür veya farklı bir arama yapmayı dener misiniz?"}
+
+        # Sonucu döndürmeden önce, sohbet geçmişini yeniden yazılan sorgu ve yanıtla güncelleyin.
+        self.memory.chat_memory.add_user_message(rewritten_query)
+        self.memory.chat_memory.add_ai_message(result)
 
         return {"result": result}
 
