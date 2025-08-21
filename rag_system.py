@@ -11,7 +11,8 @@ from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
-from classifiers.sentence_transformer_classifier import SentenceTransformerClassifier  # Yeni import
+from classifiers.sentence_transformer_classifier import SentenceTransformerClassifier
+from simple_chat_model import SimpleChatModel
 
 os.environ["CHROMA_TELEMETRY_SETTINGS"] = '{"anonymized_telemetry": false}'
 
@@ -24,16 +25,17 @@ class RagSystem:
         self.qa_chain = None
         self.retriever = None
         self.memory = None
-        self.classifier = SentenceTransformerClassifier()  # Yeni eklenen sınıf
+        self.classifier = SentenceTransformerClassifier()
+        self.simple_chat_model = SimpleChatModel()  # Basit chatbot modelini başlat
         self.conversation_history = []
-        # Dinamik soru sorma için temel kısıtlamalar ve sorular
         self.default_clarifications = [
             "Hangi türde film/dizi arıyorsunuz?",
             "Daha çok hangi türleri seversiniz?",
             "Dizi mi yoksa film mi arıyorsunuz?"
         ]
 
-        # Yeni ve daha esnek bir prompt
+
+
         self.intent_prompt_template = PromptTemplate(
             template="""Sen, kullanıcının ruh haline ve detaylı tercihlerine göre kişiselleştirilmiş film ve dizi önerileri sunan bir asistansın.
             Sadece geçerli JSON formatında yanıt ver. Başka bir metin ekleme.
@@ -160,40 +162,43 @@ class RagSystem:
         return splitter.split_documents(docs)
 
     def ask(self, query: str) -> Dict:
+        """Kullanıcının sorgusunu işler ve yanıt verir."""
         if not self.qa_chain:
             return {"result": "Sistem şu an hazır değil, lütfen bekleyin."}
 
-        # Tekrarlayan soru kontrolü
-        chat_history_list = self.memory.chat_memory.messages
-        past_queries = [msg.content for msg in chat_history_list if msg.type == "human"]
+        # Adım 1: Basit sohbeti kontrol et
+        # Bu kısım, 'SimpleChatModel' tarafından ele alınacak
+        try:
+            # Temel sohbet kelimelerini tanımlayın
+            chat_labels = ['selam', 'merhaba', 'nasılsın', 'teşekkürler', 'günaydın', 'iyi günler', 'iyiyim', 'kötüyüm',
+                           'harikayım']
+            self.classifier.set_labels(chat_labels)
 
-        if past_queries:
-            self.classifier.set_labels(past_queries)
-            # Eşik değeri biraz daha düşürülebilir, 0.7 gibi bir değer daha esnek olabilir.
+            # Sorguyu sınıflandır
             classification_result = self.classifier.classify(query, threshold=0.7)
 
+            # Eğer sorgu bir temel sohbet sorusuysa, SimpleChatModel'den yanıt al
             if classification_result['label'] != 'diğer' and classification_result['score'] > 0.7:
-                matched_query = classification_result['label']
+                response = self.simple_chat_model.respond(query)
+                return {"result": response}
 
-                matched_response = ""
-                for i in range(len(chat_history_list)):
-                    if chat_history_list[i].type == "human" and chat_history_list[i].content == matched_query:
-                        if i + 1 < len(chat_history_list) and chat_history_list[i + 1].type == "ai":
-                            matched_response = chat_history_list[i + 1].content
-                            break
+        except Exception as e:
+            print(f"Basit sohbet sınıflandırma hatası: {e}")
+            # Hata durumunda RAG akışına devam et
 
-                if matched_response:
-                    return {"result": f"Bu soruyu zaten sormuştunuz. Eski cevabım: {matched_response}"}
-
-        # Eğer benzer soru bulunmazsa, normal akışı takip et
+        # Adım 2: RAG sistemini kullan (Film/dizi sorguları için)
         try:
+            # Sohbet geçmişini al
             chat_history_str = self._get_chat_history_as_string()
-            intent_response_str = self.llm.invoke(
-                self.intent_prompt_template.format(user_input=query, chat_history=chat_history_str))
 
+            # LLM'i çağırarak niyet ve sorgu analizi yap
+            intent_response_str = self.llm.invoke(
+                self.intent_prompt_template.format(user_input=query, chat_history=chat_history_str)
+            )
+
+            # Yanıttan JSON verisini çıkar
             json_start = intent_response_str.find('{')
             json_end = intent_response_str.rfind('}')
-
             if json_start == -1 or json_end == -1:
                 print(f"Uyarı: LLM'den geçerli JSON alınamadı. Ham çıktı: {intent_response_str}")
                 intent_data = {"intent": "other", "rewritten_query": query, "needs_clarification": False,
@@ -207,16 +212,17 @@ class RagSystem:
             return {
                 "result": "Üzgünüm, şu anda isteğinizi anlamakta zorlanıyorum. Lütfen daha açık bir ifade kullanır mısınız?"}
 
+        # Niyet analizi sonuçlarını işle
         user_intent = intent_data.get("intent")
-        needs_clarification = intent_data.get("needs_clarification")
+        needs_clarification = intent_data.get("needs_clarification", False)
         clarification_notes = intent_data.get("clarification_notes", [])
         rewritten_query = intent_data.get("rewritten_query", query)
 
-        print(f"Debug - Yeniden yazılan sorgu: {rewritten_query}")
-
+        # Eğer daha fazla bilgiye ihtiyaç varsa
         if needs_clarification and clarification_notes:
             return {"result": clarification_notes[0]}
 
+        # Eğer niyet öneri ise ve kısıtlama yoksa yönlendirici bir soru sor
         if user_intent == "recommendation":
             constraints = intent_data.get("constraints", {})
             has_constraints = any(constraints.get(key) for key in ["genres", "year", "country", "duration", "rating"])
@@ -224,10 +230,12 @@ class RagSystem:
                 return {
                     "result": "Harika! Bir film/dizi önerisi arıyorsunuz. Nasıl bir türde istersiniz? Mesela, 'aksiyon filmi' ya da 'romantik komedi' gibi."}
 
+        # Yeniden yazılan sorgu boşsa hata döndür
         if not rewritten_query or not rewritten_query.strip():
             print("Uyarı: Yeniden yazılan sorgu boş kaldı.")
             return {"result": "Üzgünüm, isteğinizi tam olarak anlayamadım. Lütfen daha detaylı bilgi verir misiniz?"}
 
+        # LangChain ile sorguyu işle
         try:
             response = self.qa_chain.invoke({"question": rewritten_query})
 
@@ -240,11 +248,12 @@ class RagSystem:
             print(f"QA Chain çağrılırken hata oluştu: {e}")
             return {"result": "AI servisi şu anda yanıt vermiyor. Lütfen tekrar deneyin."}
 
+        # Yanıtı temizle ve son kullanıcıya sun
         if "Üzgünüm, aradığınız bilgiye elimdeki verilerle ulaşamıyorum" in result:
             return {
                 "result": "Aradığınız kriterlere uygun bir film bulamadım. Başka bir tür veya farklı bir arama yapmayı dener misiniz?"}
 
-        # Sonucu döndürmeden önce, sohbet geçmişini yeniden yazılan sorgu ve yanıtla güncelleyin.
+        # Sohbet geçmişini güncelle
         self.memory.chat_memory.add_user_message(rewritten_query)
         self.memory.chat_memory.add_ai_message(result)
 

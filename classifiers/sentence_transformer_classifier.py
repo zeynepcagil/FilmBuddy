@@ -3,13 +3,11 @@ from sentence_transformers import SentenceTransformer, util
 import numpy as np
 from typing import List, Dict
 
-
 class SentenceTransformerClassifier:
     """
-    Bu sınıf, bir metni, verilen etiketlere göre sınıflandırmak için
+    Bu sınıf, bir metni, önceden belirlenmiş etiketlere göre sınıflandırmak için
     Sentence-BERT modelini kullanır.
     """
-
     def __init__(self, model_name: str = 'paraphrase-multilingual-mpnet-base-v2'):
         """
         Sınıflandırma modelini başlatır.
@@ -17,7 +15,13 @@ class SentenceTransformerClassifier:
         Args:
             model_name (str): Yüklenecek Sentence Transformer modelinin adı.
         """
-        self.model = SentenceTransformer(model_name)
+        try:
+            self.model = SentenceTransformer(model_name)
+            print(f"Sentence Transformer modeli '{model_name}' başarıyla yüklendi.")
+        except Exception as e:
+            print(f"Hata: Sentence Transformer modeli yüklenirken bir sorun oluştu: {e}")
+            self.model = None
+
         self.labels = []
         self.label_embeddings = None
 
@@ -29,6 +33,10 @@ class SentenceTransformerClassifier:
         Args:
             labels (List[str]): Sınıflandırma etiketlerinin listesi.
         """
+        if not self.model:
+            print("Model yüklenmediği için etiketler ayarlanamıyor.")
+            return
+
         self.labels = labels
         self.label_embeddings = self.model.encode(self.labels, convert_to_tensor=True)
 
@@ -43,6 +51,9 @@ class SentenceTransformerClassifier:
         Returns:
             Dict: Tahmin edilen etiket ve benzerlik skorunu içeren bir sözlük.
         """
+        if not self.model:
+            return {"label": "diğer", "score": 0.0}
+
         if not self.labels:
             raise ValueError("Sınıflandırma etiketleri belirlenmemiş. Önce set_labels() metodunu çağırın.")
 
@@ -69,6 +80,9 @@ class SentenceTransformerClassifier:
         Returns:
             List[Dict]: Her bir eşleşme için etiket ve skoru içeren sözlük listesi.
         """
+        if not self.model:
+            return []
+
         if not self.labels:
             raise ValueError("Sınıflandırma etiketleri belirlenmemiş. Önce set_labels() metodunu çağırın.")
 
