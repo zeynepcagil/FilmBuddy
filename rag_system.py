@@ -1,6 +1,8 @@
 import os
 import json
+import random
 from typing import List, Dict
+
 from langchain.chains import ConversationalRetrievalChain
 from langchain.llms.base import LLM
 from langchain_community.vectorstores import Chroma
@@ -11,14 +13,20 @@ from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers import EnsembleRetriever
-from classifiers.sentence_transformer_classifier import SentenceTransformerClassifier
-from simple_chat_model import SimpleChatModel
 
+from classifiers.sentence_transformer_classifier import SentenceTransformerClassifier
+
+# ChromaDB telemetrisini devre dışı bırak
 os.environ["CHROMA_TELEMETRY_SETTINGS"] = '{"anonymized_telemetry": false}'
 
 
 class RagSystem:
-    def __init__(self, documents: List[Document], llm: LLM, db_path="./chroma_db_bge_csv"):
+    """
+    Film ve dizi önerileri yapmak için RAG (Retrieval-Augmented Generation)
+    sistemini yöneten ana sınıf.
+    """
+
+    def __init__(self, documents: List[Document], llm: LLM, db_path: str = "./chroma_db_bge_csv"):
         self.documents = documents
         self.llm = llm
         self.db_path = db_path
@@ -26,62 +34,89 @@ class RagSystem:
         self.retriever = None
         self.memory = None
         self.classifier = SentenceTransformerClassifier()
-        self.simple_chat_model = SimpleChatModel()  # Basit chatbot modelini başlat
         self.conversation_history = []
-        self.default_clarifications = [
-            "Hangi türde film/dizi arıyorsunuz?",
-            "Daha çok hangi türleri seversiniz?",
-            "Dizi mi yoksa film mi arıyorsunuz?"
-        ]
+        self.chat_history_with_queries = []
+        self.intent_examples = self._load_intent_examples()
+        self.initialize_pipeline()
 
+    def _load_intent_examples(self) -> Dict[str, List[str]]:
+        """Intent sınıflandırması için örnek cümleleri yükler."""
+        # 'lookup' intent'ini bağlamsal soruları da içerecek şekilde genişletiyoruz.
+        return {
+            "recommendation": [
+                "hangi filmi izleyebilirim", "aksiyon filmi öner", "komedi dizisi istiyorum",
+                "romantik film", "korku filmi öner", "bilim kurgu dizisi",
+                "thriller film", "animasyon öner", "netflix dizisi",
+                "yeni çıkan filmler", "klasik filmler", "dizi önerisi",
+                "film tavsiyesi", "iyi film var mı", "güzel dizi",
+                "izlemelik film", "drama filmi", "macera filmi", "aile filmi"
+            ],
+            "lookup": [
+                "bu filmi tanıyor musun", "film hakkında bilgi", "dizinin konusu nedir",
+                "film özeti", "oyuncular kimler", "yönetmen kim",
+                "film ne zaman çıktı", "kaç sezon var", "film detayları",
+                "dizi bilgileri", "cast bilgisi", "filmin imdb puanı", "dizi kaç bölüm",
+                "ne hakkında", "konusu ne", "hakkında bilgi",
+                # Bu kısımlar, bağlamsal sorular için eklenmiştir.
+                "puanı kaç", "imdb puanı ne", "yılı kaç", "kim oynuyor", "oyuncuları kim",
+                "ne kadar sürdü", "kaç bölüm", "o neydi"
+            ],
+            "greeting": [
+                "merhaba", "selam", "günaydın", "iyi günler", "nasılsın",
+                "naber", "teşekkürler", "sağol", "hoşçakal", "merhabalar",
+                "iyiyim", "kötüyüm", "harikayım", "yorgunum"
+            ],
+            "other": [
+                "hava durumu", "matematik problemi", "tarif ver", "para kazanma",
+                "sağlık tavsiyeleri", "spor haberleri", "siyaset", "ekonomi",
+                "teknoloji haberleri", "oyun öner", "kitap öner", "müzik öner",
+                "alışveriş", "seyahat", "iş bulma", "ders çalışma",
+                "python kodlama", "resim çiz", "şarkı sözleri"
+            ]
+        }
 
+    def classify_intent(self, query: str) -> Dict[str, any]:
+        """Kullanıcı sorgusunun niyetini (intent) belirler."""
+        query_lower = query.lower()
+        results = []
+        # Her bir intent için sınıflandırma yap ve sonuçları topla
+        for intent, examples in self.intent_examples.items():
+            self.classifier.set_labels(examples)
+            result = self.classifier.classify(query_lower, threshold=0.4)
+            results.append((intent, result['score'] if result['label'] != 'diğer' else 0.0))
 
-        self.intent_prompt_template = PromptTemplate(
-            template="""Sen, kullanıcının ruh haline ve detaylı tercihlerine göre kişiselleştirilmiş film ve dizi önerileri sunan bir asistansın.
-            Sadece geçerli JSON formatında yanıt ver. Başka bir metin ekleme.
+        # En yüksek skora sahip intent'i seç
+        best_intent, best_score = max(results, key=lambda x: x[1])
 
-            Kullanıcının niyetini şu kategorilerden biri olarak sınıflandır:
-            recommendation | lookup | fact | clarification | other.
+        # Eğer en iyi skor 0'sa (hiçbir intent eşleşmediyse)
+        if best_score == 0.0:
+            self.classifier.set_labels(self.intent_examples['greeting'])
+            greeting_result_low = self.classifier.classify(query_lower, threshold=0.2)
+            if greeting_result_low['label'] != 'diğer':
+                best_intent = "greeting"
+                best_score = greeting_result_low['score']
+            else:
+                best_intent = "other"
+                best_score = 0.0
 
-            Sohbet geçmişindeki bilgileri (tür, film/dizi ayrımı, ruh hali, yıl, ülke vb.) BİRLEŞTİREREK arama sorgusunu ve kısıtlamaları güncelle.
-            Eğer kullanıcı yeni bir kısıtlama (örn. yıl, tür) eklerse, bunu önceki sorguyla harmanla.
-            Örneğin, kullanıcı 'dizi olsun' dedikten sonra 'komedi' derse, sorguyu 'komedi dizileri' olarak yeniden yaz.
-            Aksiyon filmi aradıktan sonra '2020den sonra çıkanı söyle' derse, sorguyu 'aksiyon filmleri 2020 sonrası' olarak yeniden yaz.
+        needs_clarification = False
+        if best_intent == 'recommendation' and best_score < 0.6:
+            genres = ['aksiyon', 'komedi', 'romantik', 'korku', 'drama', 'macera']
+            if not any(genre in query_lower for genre in genres):
+                needs_clarification = True
 
-            Yoğun arama (dense retrieval) için EKSTRA kelime olmadan KISA ve odaklı bir İngilizce arama sorgusu üret.
-            Kullanıcı metninden yapısal kısıtlamaları (yıllar, türler, ülkeler, süre, puan) İngilizceye çevir.
-
-            Eğer bir film/dizi önerisi için temel bilgi (tür, film/dizi ayrımı vb.) eksikse, 'needs_clarification' değerini 'true' yap.
-            Bu durumda, 'clarification_notes' alanına kullanıcıya sorulacak Türkçe, net ve yönlendirici sorular ekle.
-
-            Verilen şemaya uygun SADECE geçerli JSON döndür.
-            JSON formatı:
-            {{
-              "intent": "...",
-              "rewritten_query": "...",
-              "constraints": {{
-                "genres": ["..."],
-                "year": "...",
-                "country": "...",
-                "duration": "...",
-                "rating": "..."
-              }},
-              "needs_clarification": false,
-              "clarification_notes": ["..."]
-            }}
-
-            Sohbet Geçmişi:
-            {chat_history}
-            Kullanıcı: {user_input}
-            JSON:
-            """,
-            input_variables=["user_input", "chat_history"]
-        )
+        return {
+            'intent': best_intent,
+            'confidence': best_score,
+            'needs_clarification': needs_clarification
+        }
 
     def initialize_pipeline(self):
+        """Sistemin RAG bileşenlerini (vektör veritabanı, retriever, chain) başlatır."""
         print("Sistem başlatılıyor...")
-        device = "cuda" if os.system("nvidia-smi > nul 2>&1") == 0 else "cpu"
+        device = "cuda" if os.system("nvidia-smi") == 0 else "cpu"
         print(f"Embedding modeli yükleniyor... (device={device})")
+
         embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={"device": device}
@@ -124,12 +159,17 @@ class RagSystem:
             return_messages=True
         )
 
-        custom_prompt_template = """Aşağıdaki sohbet geçmişi ve bağlamı kullanarak soruya cevap ver.
-        Cevabını oluştururken kendi düşünce sürecini yazma.
-        Güncel bilgilere ulaşmaya çalışma.
-        YANLIZCA VE SADECE AŞAĞIDAKİ BAĞLAMDA BULUNAN BİLGİLERİ KULLAN. Bağlamda bir film varsa, o filmin sorudaki kriterlere (tür, yıl, vb.) uyup uymadığını kontrol et ve uygunsa öner.
-        Eğer gelen bağlamda film/dizi önerisi yoksa veya aradığınız kriterlere uygun bir film bulunamıyorsa, "Üzgünüm, aradığınız kriterlere uygun bir film bulamadım. Başka bir tür veya farklı bir arama yapmayı dener misiniz?" de.
-        Soru, bağlamda belirtilen kriterlere uygun bir film olup olmadığını kontrol etmek için tasarlanmıştır. Bu kontrolü yap ve sonucu bildir.
+        custom_prompt_template = """Sen, kullanıcıya film ve dizi öneren samimi, içten ve yaratıcı bir asistanssın. Kullanıcıya hitap ederken doğal bir sohbet dilini kullan. Cevaplarında kalıplaşmış, robotik ifadelerden ve genelleyici cümlelerden kaçın.
+
+        Önerdiğin filmleri veya dizileri, sanki o eseri gerçekten izlemiş ve beğenmiş bir arkadaşın gibi anlat. Önerinin hemen başında kullanıcının isteğine uygun, kişisel bir giriş yap.
+
+        Örnekler:
+        - "Harika bir tercih! Komedi filmlerine bayılıyorum. Sizin için bir tane buldum: [Film Adı]. Animasyon tarzı, yetişkinlere yönelik bir film arıyorsanız, bu tam size göre olabilir."
+        - "Aksiyon filmlerinde adrenalin çok önemlidir, değil mi? Tam da aradığınız gibi bir film buldum: [Film Adı]. Baştan sona temposu hiç düşmeyen, aksiyon dolu bir macera."
+        - "Ah, bu filmin konusu gerçekten çok ilginç. [Film Adı] hakkında size biraz bilgi vereyim..."
+
+        Sadece aşağıdaki bağlamda bulunan bilgileri kullan. Bağlamda bir film varsa, o filmin sorudaki kriterlere (tür, yıl, vb.) uyup uymadığını kontrol et ve uygunsa öner.
+        Eğer gelen bağlamda film/dizi önerisi yoksa veya aradığınız kriterlere uygun bir film bulunamıyorsa, "Aradığınız kriterlere uygun bir film bulamadım. Başka bir tür veya farklı bir arama yapmayı dener misiniz?" de.
 
         Sohbet Geçmişi:
         {chat_history}
@@ -154,117 +194,162 @@ class RagSystem:
         )
         print("Sistem kullanıma hazır.")
 
-    def _split_documents(self, docs):
+    def _split_documents(self, docs: List[Document]) -> List[Document]:
+        """Dokümanları daha küçük parçalara (chunk) böler."""
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200
         )
         return splitter.split_documents(docs)
 
+    def clear_chat_history(self):
+        """Sohbet geçmişini temizler."""
+        if self.memory:
+            self.memory.clear()
+            print("Sohbet geçmişi temizlendi.")
+
+    def _extract_constraints_from_query(self, query: str) -> str:
+        """Sorgudan türleri ve diğer kısıtlamaları çıkarıp sorguyu zenginleştirir."""
+        genre_mapping = {
+            'aksiyon': 'action', 'komedi': 'comedy', 'romantik': 'romance',
+            'korku': 'horror', 'bilim kurgu': 'sci-fi', 'gerilim': 'thriller',
+            'drama': 'drama', 'animasyon': 'animation', 'belgesel': 'documentary',
+            'macera': 'adventure', 'suç': 'crime', 'savaş': 'war'
+        }
+        enhanced_query = query.lower()
+        detected_genres = []
+        for tr_genre, en_genre in genre_mapping.items():
+            if tr_genre in enhanced_query:
+                detected_genres.append(en_genre)
+        if 'dizi' in enhanced_query and 'film' not in enhanced_query:
+            enhanced_query += " series"
+        elif 'film' in enhanced_query and 'dizi' not in enhanced_query:
+            enhanced_query += " movie"
+        if detected_genres:
+            enhanced_query += f" {' '.join(detected_genres)}"
+        return enhanced_query
+
+    def _handle_other_intent(self) -> Dict:
+        """Film/dizi dışı konulara verilen yanıtları yönetir."""
+        other_responses = [
+            "Hmm, bu konuda pek bilgim yok ama film önerebilirim! Ne dersin? 🎬",
+            "O konu benim uzmanlık alanım değil ama filmlerden çok iyi anlarım! 😊",
+            "Bu konuyu bilmiyorum ama sana güzel filmler bulabilirim! İster misin?",
+            "Maalesef o konuda yardımcı olamam ama film konusunda harikulade tavsiyelerim var! 🍿"
+        ]
+        return {"result": random.choice(other_responses)}
+
+    def _handle_greeting(self, query: str) -> Dict:
+        """Selamlama ve veda ifadelerini daha doğal şekilde ele alır."""
+        farewell_keywords = ['görüşürüz', 'hoşça kal', 'bye', 'bb']
+        if any(word in query.lower() for word in farewell_keywords):
+            farewell_responses = [
+                "Hoşça kal! Film izlerken keyifli vakit geçir! 🎬",
+                "Görüşmek üzere! İyi filmler! 🍿",
+                "Kendine iyi bak! Umarım önerdiğim filmler hoşuna gider 😊"
+            ]
+            return {"result": random.choice(farewell_responses)}
+
+        greeting_result = self.classifier.classify(query.lower(), threshold=0.4)
+        response_sets = {
+            'merhaba': ["Merhaba! Ne tür filmler seversin?", "Selam! Bugün hangi ruh halinde film izlemek istiyorsun?"],
+            'teşekkürler': ["Rica ederim! İyi seyirler dilerim! 🍿", "Ne demek! Başka film lazım olursa söyle 😊"],
+            'nasılsın': ["İyiyim, teşekkürler! Sen nasılsın? Film modunda mısın?"],
+            'iyiyim': ["Süper! O zaman güzel filmler bulalım sana!", "Harika! Ruh haline uygun film önereyim mi?"]
+        }
+        label = greeting_result['label']
+        if label != 'diğer' and label in response_sets:
+            return {"result": random.choice(response_sets[label])}
+        return {"result": "Merhaba! Film önerisi mi arıyorsun?"}
+
+    def _check_for_duplicate_query(self, new_query: str, threshold: float = 0.95) -> str:
+        """
+        Yeni sorgunun, geçmişteki sorgulara çok benzeyip benzemediğini kontrol eder.
+        """
+        if not self.chat_history_with_queries:
+            return None
+        past_queries = [item['query'] for item in self.chat_history_with_queries]
+        self.classifier.set_labels(past_queries)
+        result = self.classifier.classify(new_query.lower(), threshold=threshold)
+        if result['label'] != 'diğer' and result['score'] >= threshold:
+            matched_index = past_queries.index(result['label'])
+            return self.chat_history_with_queries[matched_index]['response']
+        return None
+
     def ask(self, query: str) -> Dict:
         """Kullanıcının sorgusunu işler ve yanıt verir."""
         if not self.qa_chain:
             return {"result": "Sistem şu an hazır değil, lütfen bekleyin."}
 
-        # Adım 1: Basit sohbeti kontrol et
-        # Bu kısım, 'SimpleChatModel' tarafından ele alınacak
-        try:
-            # Temel sohbet kelimelerini tanımlayın
-            chat_labels = ['selam', 'merhaba', 'nasılsın', 'teşekkürler', 'günaydın', 'iyi günler', 'iyiyim', 'kötüyüm',
-                           'harikayım']
-            self.classifier.set_labels(chat_labels)
+        duplicate_response = self._check_for_duplicate_query(query)
+        if duplicate_response:
+            print("Debug: Benzer sorgu tespit edildi, eski cevap döndürülüyor.")
+            return {"result": duplicate_response}
 
-            # Sorguyu sınıflandır
-            classification_result = self.classifier.classify(query, threshold=0.7)
+        intent_result = self.classify_intent(query)
+        user_intent = intent_result['intent']
+        confidence = intent_result['confidence']
+        print(f"Debug: Intent={user_intent}, Confidence={confidence:.3f}")
 
-            # Eğer sorgu bir temel sohbet sorusuysa, SimpleChatModel'den yanıt al
-            if classification_result['label'] != 'diğer' and classification_result['score'] > 0.7:
-                response = self.simple_chat_model.respond(query)
-                return {"result": response}
+        # Eğer niyet bir öneri ise, sorgunun yeterli detay içerip içermediğini kontrol et.
+        if user_intent == 'recommendation':
+            # Sorguyu zenginleştirmek için kullanılan anahtar kelimeleri kontrol et.
+            enhanced_query = self._extract_constraints_from_query(query)
 
-        except Exception as e:
-            print(f"Basit sohbet sınıflandırma hatası: {e}")
-            # Hata durumunda RAG akışına devam et
+            # Eğer sorgu sadece "film öner" gibi genel bir ifade ise (ve zenginleştirme sonucu değişmemişse)
+            # o zaman kullanıcıdan ek bilgi iste.
+            if enhanced_query == query.lower():
+                clarification_responses = [
+                    "Hangi tür filmlerden hoşlanırsın? Mesela, aksiyon, komedi, romantik ya da bilim kurgu? ",
+                    "Dizi mi film mi? Ya da ne tür bir ruh halinde olduğunu söyle, sana ona göre bir şeyler bulalım. ",
+                    "Canın ne çekiyor? Macera, gerilim ya da belki biraz drama? ",
+                    "Nasıl bir film izlemek istersin? Komik mi, heyecan verici mi yoksa düşündürücü mü?"
+                ]
+                return {"result": random.choice(clarification_responses)}
 
-        # Adım 2: RAG sistemini kullan (Film/dizi sorguları için)
-        try:
-            # Sohbet geçmişini al
-            chat_history_str = self._get_chat_history_as_string()
+            # Sorgu yeterince spesifikse, RAG pipeline'ını çalıştır.
+            try:
+                response = self.qa_chain.invoke({"question": enhanced_query})
+                result = response.get("answer", "Bir sorun oluştu.")
 
-            # LLM'i çağırarak niyet ve sorgu analizi yap
-            intent_response_str = self.llm.invoke(
-                self.intent_prompt_template.format(user_input=query, chat_history=chat_history_str)
-            )
+                if "Aradığınız kriterlere uygun" in result or "bulamadım" in result.lower():
+                    not_found_responses = [
+                        "Hmm, tam istediğin gibi film bulamadım. Başka bir tür deneyelim mi? 🤔",
+                        "Bu kriterlere uygun film çıkmadı. Biraz farklı bir arama yapalım mı?",
+                    ]
+                    result = random.choice(not_found_responses)
 
-            # Yanıttan JSON verisini çıkar
-            json_start = intent_response_str.find('{')
-            json_end = intent_response_str.rfind('}')
-            if json_start == -1 or json_end == -1:
-                print(f"Uyarı: LLM'den geçerli JSON alınamadı. Ham çıktı: {intent_response_str}")
-                intent_data = {"intent": "other", "rewritten_query": query, "needs_clarification": False,
-                               "clarification_notes": []}
-            else:
-                json_str_cleaned = intent_response_str[json_start:json_end + 1]
-                intent_data = json.loads(json_str_cleaned)
+                self.chat_history_with_queries.append({'query': query.lower(), 'response': result})
+                return {"result": result}
+            except Exception as e:
+                print(f"RAG pipeline hatası: {e}")
+                return {"result": "Üzgünüm, bir hata oluştu. Daha sonra tekrar deneyin."}
 
-        except (json.JSONDecodeError, ValueError, Exception) as e:
-            print(f"Niyet sınıflandırma hatası: {e}")
-            return {
-                "result": "Üzgünüm, şu anda isteğinizi anlamakta zorlanıyorum. Lütfen daha açık bir ifade kullanır mısınız?"}
+        # Bilgi arama (lookup) intent'i için RAG pipeline'ını çalıştır.
+        elif user_intent == 'lookup':
+            try:
+                response = self.qa_chain.invoke({"question": query})
+                result = response.get("answer", "Bir sorun oluştu.")
 
-        # Niyet analizi sonuçlarını işle
-        user_intent = intent_data.get("intent")
-        needs_clarification = intent_data.get("needs_clarification", False)
-        clarification_notes = intent_data.get("clarification_notes", [])
-        rewritten_query = intent_data.get("rewritten_query", query)
+                if "Aradığınız kriterlere uygun" in result or "bulamadım" in result.lower():
+                    not_found_responses = [
+                        "Üzgünüm, bu konuda yeterli bilgi bulamadım. Başka bir şey sormak ister misin?",
+                        "Bu bilgiye sahip değilim, ama sana film veya dizi önerebilirim!",
+                    ]
+                    result = random.choice(not_found_responses)
 
-        # Eğer daha fazla bilgiye ihtiyaç varsa
-        if needs_clarification and clarification_notes:
-            return {"result": clarification_notes[0]}
+                self.chat_history_with_queries.append({'query': query.lower(), 'response': result})
+                return {"result": result}
+            except Exception as e:
+                print(f"RAG pipeline hatası: {e}")
+                return {"result": "Üzgünüm, bir hata oluştu. Daha sonra tekrar deneyin."}
 
-        # Eğer niyet öneri ise ve kısıtlama yoksa yönlendirici bir soru sor
-        if user_intent == "recommendation":
-            constraints = intent_data.get("constraints", {})
-            has_constraints = any(constraints.get(key) for key in ["genres", "year", "country", "duration", "rating"])
-            if not has_constraints:
-                return {
-                    "result": "Harika! Bir film/dizi önerisi arıyorsunuz. Nasıl bir türde istersiniz? Mesela, 'aksiyon filmi' ya da 'romantik komedi' gibi."}
+        # Diğer intent'ler için önceden tanımlı yanıtlar kullanılır.
+        elif user_intent == 'other':
+            return self._handle_other_intent()
+        elif user_intent == 'greeting':
+            return self._handle_greeting(query)
 
-        # Yeniden yazılan sorgu boşsa hata döndür
-        if not rewritten_query or not rewritten_query.strip():
-            print("Uyarı: Yeniden yazılan sorgu boş kaldı.")
-            return {"result": "Üzgünüm, isteğinizi tam olarak anlayamadım. Lütfen daha detaylı bilgi verir misiniz?"}
-
-        # LangChain ile sorguyu işle
-        try:
-            response = self.qa_chain.invoke({"question": rewritten_query})
-
-            if isinstance(response, dict) and "answer" in response:
-                result = response["answer"]
-            else:
-                print(f"Uyarı: QA Chain'den geçersiz yanıt formatı alındı: {response}")
-                return {"result": "İsteğiniz işlenirken bir sorun oluştu. Lütfen tekrar deneyin."}
-        except Exception as e:
-            print(f"QA Chain çağrılırken hata oluştu: {e}")
-            return {"result": "AI servisi şu anda yanıt vermiyor. Lütfen tekrar deneyin."}
-
-        # Yanıtı temizle ve son kullanıcıya sun
-        if "Üzgünüm, aradığınız bilgiye elimdeki verilerle ulaşamıyorum" in result:
-            return {
-                "result": "Aradığınız kriterlere uygun bir film bulamadım. Başka bir tür veya farklı bir arama yapmayı dener misiniz?"}
-
-        # Sohbet geçmişini güncelle
-        self.memory.chat_memory.add_user_message(rewritten_query)
-        self.memory.chat_memory.add_ai_message(result)
-
-        return {"result": result}
-
-    def _get_chat_history_as_string(self):
-        """Sohbet geçmişini LLM'e verilecek string formatına dönüştürür."""
-        chat_history = self.memory.load_memory_variables({})["chat_history"]
-        return " ".join([f"{msg.type}: {msg.content}" for msg in chat_history])
-
-    def clear_chat_history(self):
-        if self.memory:
-            self.memory.clear()
-            print("Sohbet geçmişi temizlendi.")
+        # Olası bir hata durumunda genel bir yanıt.
+        return {
+            "result": "Üzgünüm, isteğinizi tam olarak anlayamadım. Film veya dizi önerisi için ne tür bir şey izlemek istediğinizi söyleyebilir misiniz?"}

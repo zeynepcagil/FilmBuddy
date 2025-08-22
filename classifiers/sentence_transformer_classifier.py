@@ -1,4 +1,4 @@
-# classifiers/sentence_transformer_classifier.py dosyasının içeriği
+
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 from typing import List, Dict
