@@ -1,5 +1,4 @@
 import os
-import json
 import random
 from typing import List, Dict
 
@@ -57,7 +56,6 @@ class RagSystem:
                 "film ne zaman çıktı", "kaç sezon var", "film detayları",
                 "dizi bilgileri", "cast bilgisi", "filmin imdb puanı", "dizi kaç bölüm",
                 "ne hakkında", "konusu ne", "hakkında bilgi",
-                # Bu kısımlar, bağlamsal sorular için eklenmiştir.
                 "puanı kaç", "imdb puanı ne", "yılı kaç", "kim oynuyor", "oyuncuları kim",
                 "ne kadar sürdü", "kaç bölüm", "o neydi"
             ],

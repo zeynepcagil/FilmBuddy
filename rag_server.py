@@ -1,5 +1,5 @@
 import warnings
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,render_template
 from threading import Thread
 # Diğer modüllerinizi import edin
 from data_handler import DataLoader
@@ -42,7 +42,7 @@ class RAGServer:
         """
         @self.app.route("/")
         def index():
-            return "RAG Sistem HTTP sunucusu çalışıyor. Sorgular için: /ask?query=<soru>"
+            return render_template('index.html')
 
         @self.app.route("/ask", methods=["POST"])
         def ask_endpoint():
@@ -97,4 +97,5 @@ class RAGServer:
         """
         Thread(target=self.terminal_loop, daemon=True).start()
         print("HTTP sunucusu başlatılıyor...")
+
         self.app.run(host="0.0.0.0", port=5000, debug=False)
