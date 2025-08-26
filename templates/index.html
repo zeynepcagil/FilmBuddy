@@ -2,48 +2,27 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Film ve Dizi Asistanı</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Film ve Dizi Öneri Asistanı</h1>
-    <p>Merhaba! Ne tür filmler veya diziler aradığını sorabilirsin.</p>
 
-    <form id="ask-form">
-        <label for="query">Sorgunuz:</label><br>
-        <input type="text" id="query" name="query" size="50"><br><br>
-        <button type="submit">Gönder</button>
-    </form>
-    
-    <div id="response-container">
-        <h2>Yanıt:</h2>
-        <p id="response-text"></p>
+    <div class="chat-container">
+        <h1>Film ve Dizi Öneri Asistanı</h1>
+
+        <div id="chat-history">
+            <div class="message assistant-message">
+                <p>Merhaba! Ne tür filmler veya diziler aradığını sorabilirsin.</p>
+            </div>
+        </div>
+
+        <form id="ask-form">
+            <input type="text" id="query" placeholder="Sorgunuzu buraya yazın..." required>
+            <button type="submit">Gönder</button>
+        </form>
     </div>
 
-    <script>
-        const form = document.getElementById('ask-form');
-        const queryInput = document.getElementById('query');
-        const responseText = document.getElementById('response-text');
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
-            const query = queryInput.value;
-            responseText.innerText = "Yanıt aranıyor...";
-
-            try {
-                const response = await fetch('/ask', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ query: query }),
-                });
-
-                const data = await response.json();
-                responseText.innerText = data.response;
-            } catch (error) {
-                responseText.innerText = 'Bir hata oluştu: ' + error.message;
-            }
-        });
-    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

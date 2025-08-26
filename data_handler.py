@@ -69,7 +69,8 @@ class DataLoader:
 
     def _load_csv(self) -> List[Document]:
         """
-        CSV dosyasını parça parça yükler.
+        CSV dosyasını satır satır Document listesine dönüştürür.
+        Genre, title, year gibi alanlar metadata olarak ayrılır.
         """
         try:
             documents = []
@@ -81,28 +82,26 @@ class DataLoader:
             headers = list(first_chunk.columns)
             headers_string = ", ".join(headers)
 
-            for index, row in first_chunk.iterrows():
+            def row_to_doc(row, idx):
                 text_content = " ".join(
                     f"{header}: {value}" for header, value in zip(headers, row.values) if pd.notna(value)
                 )
                 metadata = {
                     "source": self.file_path,
-                    "row_index": index,
-                    "headers": headers_string
+                    "row_index": idx,
+                    "headers": headers_string,
+                    "title": row.get("title", None),
+                    "genres": str(row.get("genres", "")).lower().split(","),
+                    "year": row.get("year", None)
                 }
-                documents.append(Document(page_content=text_content, metadata=metadata))
+                return Document(page_content=text_content, metadata=metadata)
+
+            for index, row in first_chunk.iterrows():
+                documents.append(row_to_doc(row, index))
 
             for chunk in df_iterator:
                 for index, row in chunk.iterrows():
-                    text_content = " ".join(
-                        f"{headers[i]}: {row.iloc[i]}" for i in range(len(headers)) if pd.notna(row.iloc[i])
-                    )
-                    metadata = {
-                        "source": self.file_path,
-                        "row_index": index,
-                        "headers": headers_string
-                    }
-                    documents.append(Document(page_content=text_content, metadata=metadata))
+                    documents.append(row_to_doc(row, index))
 
             print(f"'{self.file_path}' dosyasından toplam {len(documents)} CSV satırı yüklendi.")
             return documents
