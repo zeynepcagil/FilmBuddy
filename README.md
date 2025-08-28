@@ -34,26 +34,27 @@ Film Buddy, sizinle tıpkı bir arkadaş gibi sohbet ederek film ve dizi öneril
 ```
 film-buddy/
 │
-├── classifiers/            # Niyet sınıflandırma modeli ve kodları
-│   ├── __init__.py
-│   └── sentence_transformer_classifier.py
-├── data_handler.py        # Veri yükleme & doküman oluşturma
-├── llm_model.py           # LLM yönetimi & sayaç
-├── counter.py             # Performans metriği
-├── rag_system.py          # RAG pipeline & niyet sınıflandırma
-├── main.py                # Ana giriş noktası
-├── requirements.txt       # Bağımlılıklar
-├── static/                 # HTML/CSS/JS gibi statik web dosyaları
-│   ├── css/
-│   ├── js/
-├── templates/              # Flask için HTML şablonları
-│   └── index.html
-├── .gitignore             # Gereksiz dosyaları hariç tutar
-├── .github/
-│   ├── ISSUE_TEMPLATE/    # Yeni issue şablonları
-│   └── PULL_REQUEST_TEMPLATE.md
-└── doc/
-    └── n_movies.csv       # Örnek veri seti
+├── classifiers/ # Niyet sınıflandırma modeli ve kodları
+│ ├── init.py
+│ └── sentence_transformer_classifier.py
+├── data_handler.py # Veri yükleme ve doküman oluşturma
+├── llm_model.py # LLM yönetimi ve sayaç
+├── counter.py # Performans metriği
+├── rag_system.py # RAG pipeline ve niyet sınıflandırma
+├── rag_server.py # RAG sistemini sunucu tarafında çalıştırır
+├── main.py # Ana giriş noktası
+├── requirements.txt # Proje bağımlılıkları
+├── static/ # HTML/CSS/JS gibi statik web dosyaları
+│ ├── css/
+│ ├── js/
+├── templates/ # Flask HTML şablonları
+│ └── index.html
+├── .gitignore # Git tarafından göz ardı edilecek dosyalar
+├── .github/ # Issue ve Pull Request şablonları
+│ ├── ISSUE_TEMPLATE/
+│ └── PULL_REQUEST_TEMPLATE.md
+└── doc/ # Örnek veri seti
+└── n_movies.csv
 ```
 
 🛠 Kurulum
