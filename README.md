@@ -97,6 +97,11 @@ Film Buddy'yi tanıyın! Basit bir merhaba ile sohbeti başlatın ve ruh haliniz
 ![Ekran Görüntüsü 4](screenshots/screenshots-3.png)
 *Sadece verdiğiniz bağlama bağımlı kalır.*
 
+---
+### ⚖️ Lisans
+
+Bu proje **[MIT Lisansı](LICENSE)** altında lisanslanmıştır.
+
 🤝 Katkıda Bulunma
 
 Projeye katkıda bulunmak için:
