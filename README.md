@@ -1,4 +1,6 @@
-📚 Knowledge Scout
+📚 Film Buddy
+
+![Film Buddy Logo](assets/film_buddy_logo.png)
 
 **Knowledge Scout**, RAG (Retrieval-Augmented Generation) mimarisiyle çalışan, Türkçe dil desteğine sahip bir soru-cevap sistemidir. CSV veya TXT dosyalarından veri işler, vektör veritabanında saklar ve kullanıcının sorularına yapay zeka destekli yanıtlar üretir. Sistemin en önemli özelliklerinden biri, daha doğru sonuçlar için **niyet sınıflandırma** yapması ve performans takibi için **dahili bir sayaç** içermesidir.
 
