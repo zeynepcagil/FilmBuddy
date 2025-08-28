@@ -26,12 +26,6 @@ class RagSystem:
     """
 
     def __init__(self, documents: List[Document], llm: LLM, db_path: str = "./chroma_db_bge_csv"):
-        """
-        RagSystem sınıfını başlatır.
-        :param documents: RAG veritabanı için kullanılacak dokümanların listesi.
-        :param llm: Kullanılacak LLM modeli.
-        :param db_path: ChromaDB'nin saklanacağı dizin yolu.
-        """
         self.documents = documents
         self.llm = llm
         self.db_path = db_path
@@ -55,7 +49,10 @@ class RagSystem:
         self.initialize_pipeline()
 
     def _load_intent_examples(self) -> Dict[str, List[str]]:
-        """Intent sınıflandırması için örnek cümleleri yükler."""
+        """
+        GELİŞTİRİLDİ: Intent sınıflandırması için örnek cümleleri yükler.
+        "Gratitude" (Teşekkür) niyeti eklendi.
+        """
         return {
             "recommendation": [
                 "hangi filmi izleyebilirim", "aksiyon filmi öner", "komedi dizisi istiyorum",
@@ -66,7 +63,9 @@ class RagSystem:
                 "izlemelik film", "drama filmi", "macera filmi", "aile filmi",
                 "komedi filmi öner", "aksiyon istiyorum", "romantik dizi",
                 "futbol filmi", "voleybol dizisi", "spor filmi", "distopya filmi", "uzay filmi",
-                "daha çocuk dostu bir şey öner", "farklı bir tane", "başka bir film", "başka bir dizi"
+                "daha çocuk dostu bir şey öner", "farklı bir tane", "başka bir film", "başka bir dizi",
+                "başka öner", "aşçılık ile ilgili film", "yemek filmi", "şef filmi", "yemek üzerine film",
+                "aşçılık dizisi"
             ],
             "lookup": [
                 "bu filmin konusu ne", "filmin konusu ne", "hakkında bilgi", "oyuncuları kim",
@@ -86,6 +85,9 @@ class RagSystem:
                 "iyiyim", "kötüyüm", "harikayım", "yorgunum", "hi", "hello",
                 "görüşürüz", "hoşça kal", "bye", "bb", "bye bye"
             ],
+            "gratitude": [
+                "teşekkürler", "teşekkür ederim", "sağ ol", "eline sağlık"
+            ],
             "affirmative": [
                 "evet", "tabii", "olur", "tamam", "istiyorum", "isterim",
                 "kesinlikle", "aynen", "doğru", "kabul", "yes", "okay"
@@ -98,36 +100,30 @@ class RagSystem:
                 "python kodlama", "resim çiz", "şarkı sözleri"
             ]
         }
+
     def classify_intent(self, query: str) -> Dict[str, any]:
-        """Kullanıcı sorgusunun niyetini (intent) belirler."""
+        """
+        GELİŞTİRİLDİ: Niyet sınıflandırmasını daha güvenilir hale getirir.
+        """
         query_lower = query.lower()
 
-        # Film dışı istekleri kontrol et
-        non_film_keywords = [
-            'yemek tarifi', 'tarif', 'yemek', 'nasıl yapılır', 'malzeme',
-            'hava durumu', 'matematik', 'ders', 'ödev', 'kod', 'program',
-            'para kazanma', 'iş', 'sağlık', 'doktor', 'hastalık', 'spor',
-            'siyaset', 'ekonomi', 'teknoloji', 'oyun', 'kitap', 'müzik',
-            'alışveriş', 'seyahat', 'python', 'resim çiz', 'şarkı'
-        ]
-        if any(keyword in query_lower for keyword in non_film_keywords):
-            return {'intent': 'other', 'confidence': 0.9, 'needs_clarification': False}
+        # Filmlere özel alt-türleri kontrol et ve doğrudan recommendation döndür
+        special_film_keywords = ['aşçılık', 'yemek', 'şef', 'futbol', 'voleybol', 'distopya', 'uzay']
+        if any(keyword in query_lower for keyword in special_film_keywords):
+            return {'intent': 'recommendation', 'confidence': 1.0, 'needs_clarification': False}
 
-        results = []
-        specific_genre_keywords = ['komedi', 'aksiyon', 'romantik', 'korku', 'drama', 'bilim kurgu', 'futbol',
-                                   'voleybol', 'spor', 'distopya', 'siberpunk', 'uzay operası']
-        if any(genre in query_lower for genre in specific_genre_keywords):
-            return {'intent': 'recommendation', 'confidence': 0.9, 'needs_clarification': False}
-
-        # Lookup için daha esnek anahtar kelime kontrolü
+        # Look-up için anahtar kelime kontrolü
         lookup_keywords = ['oyuncu', 'oynuyor', 'konusu', 'puan', 'rating', 'yönetmen', 'yöneten', 'yıl', 'ne zaman',
                            'ne hakkında']
         if any(keyword in query_lower for keyword in lookup_keywords):
             return {'intent': 'lookup', 'confidence': 0.9, 'needs_clarification': False}
 
+        # Diğer niyetler için Sentence Transformer kullan
+        results = []
         for intent, examples in self.intent_examples.items():
             self.classifier.set_labels(examples)
-            result = self.classifier.classify(query_lower, threshold=0.4)
+            # Threshold değerini 0.3'e düşürdüm
+            result = self.classifier.classify(query_lower, threshold=0.3)
             if result['label'] != 'diğer':
                 results.append((intent, result['score']))
 
@@ -263,7 +259,9 @@ class RagSystem:
         }
 
     def _check_repeated_question(self, query: str) -> Dict:
-        """Tekrarlanan soruları kontrol eder ve yanıt verir."""
+        """
+        Düzeltildi: Tekrarlanan soruları daha güvenilir şekilde kontrol eder.
+        """
         query_normalized = query.lower().strip()
         normalized_variants = {
             'hakkında': ['ne hakkında', 'konusu ne', 'hakkında bilgi', 'konusu nedir'],
@@ -272,23 +270,27 @@ class RagSystem:
             'yönetmen': ['yönetmen kim', 'yöneten kim', 'yönetmeni kim']
         }
 
-        if self.conversation_state['current_context']:
+        # current_context mevcut ve geçerli bir film adı içeriyorsa kontrol et
+        if self.conversation_state['current_context'] and self.conversation_state['current_context'] not in ["film",
+                                                                                                             "dizi",
+                                                                                                             "tabii"]:
             context_film = self.conversation_state['current_context'].lower()
             for question_type, variants in normalized_variants.items():
                 for variant in variants:
                     if variant in query_normalized:
                         question_key = f"{context_film}_{question_type}"
-                        if question_key in self.conversation_state['asked_questions']:
-                            previous_response = self.conversation_state['last_responses'].get(question_key, "")
+                        if question_key in self.conversation_state['last_responses']:
+                            previous_response = self.conversation_state['last_responses'][question_key]
                             repeat_responses = [
                                 f"Bu soruyu zaten sormuştunuz! {context_film.title()} hakkında şunu söylemiştim: {previous_response}",
                                 f"Daha önce de sormuştunuz, {context_film.title()} için yanıtımı tekrar edeyim: {previous_response}",
                                 f"Bu konuyu geçen konuştuk, {context_film.title()} hakkında: {previous_response}"
                             ]
                             return {"result": random.choice(repeat_responses)}
-                        else:
-                            self.conversation_state['asked_questions'].append(question_key)
-                            return None
+                        # Soru daha önce sorulmamışsa, kaydet
+                        self.conversation_state['last_responses'][
+                            question_key] = ""  # Yanıtı aldıktan sonra güncellenecek
+                        return None
         return None
 
     def _extract_genre_from_text(self, text: str) -> str:
@@ -296,7 +298,7 @@ class RagSystem:
         Verilen metinden bilinen film türlerini çıkarır.
         """
         genres = ['aksiyon', 'komedi', 'romantik', 'korku', 'drama', 'bilim kurgu',
-                  'gerilim', 'animasyon', 'belgesel', 'macera', 'suç', 'savaş', 'belgesel',
+                  'gerilim', 'animasyon', 'belgesel', 'macera', 'suç', 'savaş',
                   'distopya', 'siberpunk', 'uzay operası']
 
         for genre in genres:
@@ -312,7 +314,8 @@ class RagSystem:
             'drama': 'drama', 'animasyon': 'animation', 'belgesel': 'documentary',
             'macera': 'adventure', 'suç': 'crime', 'savaş': 'war',
             'futbol': 'soccer', 'voleybol': 'volleyball', 'spor': 'sports',
-            'distopya': 'dystopian', 'siberpunk': 'cyberpunk', 'uzay operası': 'space opera'
+            'distopya': 'dystopian', 'siberpunk': 'cyberpunk', 'uzay operası': 'space opera',
+            'aşçılık': 'chef cooking', 'yemek': 'food chef'
         }
         enhanced_query = query.lower()
         detected_genres = []
@@ -338,41 +341,75 @@ class RagSystem:
 
     def _extract_film_context(self, response_text: str):
         """
-        Modelin yanıtından film/dizi adını çıkarır ve conversation_state'e kaydeder.
+        GELİŞTİRİLDİ: Modelin yanıtından film/dizi adını daha güvenilir şekilde çıkarır
+        ve conversation_state'e kaydeder.
         """
-        # Önce ** işaretleri arasındaki metni ara (eğer varsa)
+        # Önce ** işaretleri arasındaki metni ara (en güvenilir yöntem)
         match = re.search(r"\*\*(.+?)\*\*", response_text)
         if match:
             title = match.group(1).strip()
             self.conversation_state['current_context'] = title
             return
 
-        # ** işareti yoksa, büyük harfle başlayan kelimeleri topla (daha az güvenilir yöntem)
+        # ** işareti yoksa, yanıtın başındaki kelimeleri topla (ikincil yöntem)
         words = response_text.split()
-        title = ""
-        # Yaygın Türkçe kelimelerden ve zamirlerden kaçın
+        title_parts = []
         ignore_list = ["Film", "Dizi", "Konu", "Önerim", "Size", "İçin", "İyi", "Güzel", "Bu", "Ah", "Ben", "Sen", "O",
                        "Onu", "Eğer", "Bol", "Tam", "Daha", "Bu", "Eğer"]
 
         for word in words:
-            # Noktalama işaretlerini temizle
             clean_word = word.strip('.,?!').strip()
-            # Kelimenin sadece ilk harfi büyük ve listedeki kelimelerden değilse al
-            if clean_word and clean_word[0].isupper() and clean_word not in ignore_list:
-                title += clean_word + " "
-            elif title:
-                # Bir isim bulduktan sonra, boşlukla ayrılmış kelimeye denk gelince döngüyü kır
+            if not clean_word:
+                continue
+
+            if clean_word[0].isupper() and clean_word not in ignore_list:
+                title_parts.append(clean_word)
+            elif title_parts:
+                # Bir isim bulduktan sonra, küçük harfli kelimeye denk gelince döngüyü kır
                 break
 
-        if title:
-            self.conversation_state['current_context'] = title.strip()
+        if title_parts:
+            self.conversation_state['current_context'] = " ".join(title_parts).strip()
         else:
             self.conversation_state['current_context'] = None
 
+    def _check_repeated_question(self, query: str) -> Dict:
+        """
+        GELİŞTİRİLDİ: Tekrarlanan soruları daha güvenilir şekilde kontrol eder.
+        """
+        query_normalized = query.lower().strip()
+        normalized_variants = {
+            'hakkında': ['ne hakkında', 'konusu ne', 'hakkında bilgi', 'konusu nedir'],
+            'puan': ['puanı kaç', 'imdb puanı', 'kaç puan', 'puanı ne'],
+            'oyuncu': ['kim oynuyor', 'oyuncular kimler', 'oyuncuları kim'],
+            'yönetmen': ['yönetmen kim', 'yöneten kim', 'yönetmeni kim']
+        }
+
+        # current_context mevcut ve geçerli bir film adı içeriyorsa kontrol et
+        if self.conversation_state['current_context'] and self.conversation_state['current_context'].lower() not in [
+            "film", "dizi", "tabii"]:
+            context_film = self.conversation_state['current_context'].lower()
+            for question_type, variants in normalized_variants.items():
+                for variant in variants:
+                    if variant in query_normalized:
+                        question_key = f"{context_film}_{question_type}"
+                        if question_key in self.conversation_state['last_responses']:
+                            previous_response = self.conversation_state['last_responses'][question_key]
+                            repeat_responses = [
+                                f"Bu soruyu zaten sormuştunuz! {context_film.title()} hakkında şunu söylemiştim: {previous_response}",
+                                f"Daha önce de sormuştunuz, {context_film.title()} için yanıtımı tekrar edeyim: {previous_response}",
+                                f"Bu konuyu geçen konuştuk, {context_film.title()} hakkında: {previous_response}"
+                            ]
+                            return {"result": random.choice(repeat_responses)}
+                        # Soru daha önce sorulmamışsa, kaydet
+                        self.conversation_state['last_responses'][
+                            question_key] = ""  # Yanıtı aldıktan sonra güncellenecek
+                        return None
+        return None
     def _handle_other_intent(self, query: str) -> Dict:
         """'Diğer' olarak sınıflandırılan sorguları ele alır."""
         general_responses = [
-            "Hmm, bu konuda pek bilgim yok ama film önerebilirim! Ne dersin? �",
+            "Hmm, bu konuda pek bilgim yok ama film önerebilirim! Ne dersin? 😊",
             "O konu benim uzmanlık alanım değil ama filmlerden çok iyi anlarım! 😊",
             "Bu konuyu bilmiyorum ama sana güzel filmler bulabilirim! İster misin?",
             "Maalesef o konuda yardımcı olamam ama film konusunda harikulade tavsiyelerim var! 🍿"
@@ -391,6 +428,22 @@ class RagSystem:
             if keyword in query_lower:
                 return {"result": random.choice(responses)}
 
+            # Yeni eklenen kısım: Filmle ilgili olup olmadığını kontrol et
+        film_related_keywords = ['film', 'dizi', 'oyuncu', 'konu', 'puan', 'öner']
+        query_lower = query.lower()
+
+        if any(keyword in query_lower for keyword in film_related_keywords):
+            # Filmle ilgili bir soru ise, daha özel bir yanıt ver
+            return {
+                "result": "Üzgünüm, o film hakkında bir bilgim yok. Ama sana başka harika filmler bulabilirim! Ne tür bir şey arıyorsun?"}
+
+            # Filmle ilgili olmayan bir soru ise, genel yanıtı ver
+        general_responses = [
+                "Hmm, bu konuda pek bilgim yok ama film önerebilirim! Ne dersin? 😊",
+                "O konu benim uzmanlık alanım değil ama filmlerden çok iyi anlarım! 😊",
+                "Bu konuyu bilmiyorum ama sana güzel filmler bulabilirim! İster misin?",
+                "Maalesef o konuda yardımcı olamam ama film konusunda harikulade tavsiyelerim var! 🍿"
+            ]
         return {"result": random.choice(general_responses)}
 
     def _handle_mood_expression(self, query: str) -> Dict:
@@ -488,6 +541,17 @@ class RagSystem:
                 "Merhaba! Film önerisi için buradayım!"
             ]
             return {"result": random.choice(general_responses)}
+
+    def _handle_gratitude(self) -> Dict:
+        """Yeni: Teşekkürleri ele alır."""
+        gratitude_responses = [
+            "Rica ederim!",
+            "Ne demek, her zaman!",
+            "Yardımcı olabildiğime sevindim.",
+            "Keyifli bir film izleme deneyimi dilerim!"
+        ]
+        return {"result": random.choice(gratitude_responses)}
+
     def _handle_affirmative(self) -> Dict:
         """Onaylama niyetini ele alır."""
         if not self.conversation_state['mood_shared'] and not self.conversation_state['preference_asked']:
@@ -508,6 +572,7 @@ class RagSystem:
     def ask(self, query: str) -> Dict:
         """
         Kullanıcının sorgusunu işler, niyetine göre yanıt verir.
+        Bu versiyon, film bulunamadığında daha iyi yanıt verir.
         """
         if not self.qa_chain:
             return {"result": "Sistem şu an hazır değil, lütfen bekleyin."}
@@ -528,36 +593,39 @@ class RagSystem:
         try:
             # En kritik niyetleri (öneri, arama) en başta ele al
             if intent in ["recommendation", "lookup"]:
+
+                # Eğer niyet 'lookup' ve sorgu belirsizse (örneğin 'bunun'), son önerilen filmin adını ekle.
+                # Bu, RAG sisteminin doğru filmi bulmasını sağlar.
                 enhanced_query = self._extract_constraints_from_query(query)
                 if intent == "lookup" and "bunun" in enhanced_query.lower() and self.conversation_state.get(
                         'last_recommendation'):
                     last_rec = self.conversation_state['last_recommendation']
                     # Önerilen film adını bulmak için regex kullan
-                    match = re.search(r"“(.+?)”", last_rec)
+                    match = re.search(r"\*\*(.+?)\*\*", last_rec)
                     if match:
                         film_adi = match.group(1).strip()
                         enhanced_query = f"{film_adi} filminin {enhanced_query}"
 
+                # Detaylı öneri veya arama ise, RAG pipeline'ını çalıştır
                 response = self.qa_chain.invoke({"question": enhanced_query})
                 result = response.get("answer", "Bir sorun oluştu.")
 
+                # Film bulunamadığında daha doğru bir yanıt ver
+                if "Aradığınız kriterlere uygun" in result or "bulamadım" in result.lower() or "Maalesef" in result:
+                    if intent == "lookup":
+                        return {
+                            "result": f"Üzgünüm, '*{query}*' hakkında bir bilgi bulamadım. Başka bir film veya dizi için yardımcı olabilirim."}
+                    else:
+                        not_found_responses = [
+                            "Hmm, tam istediğin gibi bir film bulamadım. Başka bir tür deneyelim mi? 🤔",
+                            "Bu kriterlere uygun bir sonuç çıkmadı. Belki aramanı biraz daha detaylandırmak istersin?",
+                        ]
+                        return {"result": random.choice(not_found_responses)}
+
+                # Eğer film bulunduysa ve niyet öneri ise, bağlamı güncelle
                 if intent == "recommendation":
                     self.conversation_state['last_recommendation'] = result
-
-                    # Bu kısım, yeni eklenen kod bloğudur.
-                    # Yanıttaki büyük harfle başlayan kelime/kelime öbeğini film adı olarak varsayıyoruz.
-                    words = result.split()
-                    title = ""
-                    for word in words:
-                        if word.istitle() and word not in ["Film", "Dizi", "Konu", "Önerim", "Size", "İçin", "İyi",
-                                                           "Güzel", "Bu", "Ah", "Ben", "Sen", "O", "Onu"]:
-                            title += word + " "
-                        elif title:
-                            break
-                    if title:
-                        self.conversation_state['current_context'] = title.strip()
-                    else:
-                        self.conversation_state['current_context'] = None
+                    self._extract_film_context(result)
 
                 if self.conversation_state['current_context']:
                     context_film = self.conversation_state['current_context'].lower()
@@ -575,14 +643,11 @@ class RagSystem:
                         question_key = f"{context_film}_{question_type}"
                         self.conversation_state['last_responses'][question_key] = result
 
-                if "Aradığınız kriterlere uygun" in result or "bulamadım" in result.lower():
-                    not_found_responses = [
-                        "Hmm, tam istediğin gibi bir film bulamadım. Başka bir tür deneyelim mi? 🤔",
-                        "Bu kriterlere uygun bir sonuç çıkmadı. Belki aramanı biraz daha detaylandırmak istersin?",
-                    ]
-                    result = random.choice(not_found_responses)
                 return {"result": result}
 
+            # Eğer ilk koşul sağlanmazsa, diğer sohbet niyetlerini kontrol et
+            elif intent == "gratitude":
+                return self._handle_gratitude()
             elif intent == "greeting":
                 return self._handle_greeting(query)
             elif intent == "affirmative":
@@ -595,6 +660,7 @@ class RagSystem:
                 return {
                     "result": "Üzgünüm, isteğinizi anlayamadım. Film veya diziyle ilgili bir sorunuz varsa yardımcı olabilirim."
                 }
+
         except Exception as e:
             print(f"Sorgu işlenirken bir hata oluştu: {e}")
             return {"result": "Üzgünüm, isteğinizi işlerken bir hata oluştu. Lütfen daha sonra tekrar deneyin."}
