@@ -8,7 +8,7 @@ from typing import Optional, List
 import g4f
 from langchain_core.language_models import LLM
 import tiktoken
-from counter import llm_counter # Yeni sayaç nesnesini import edin
+from counter import llm_counter
 
 # Token sayımı için bir yardımcı fonksiyon
 def get_token_count(text: str, model_name: str) -> int:

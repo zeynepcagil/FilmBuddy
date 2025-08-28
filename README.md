@@ -1,53 +1,72 @@
-📚 Film Buddy
+# 🎬 Film Buddy
 
-![Film Buddy Logo](assets/film_buddy_logo.png)
+Kişisel film ve dizi öneri asistanınız.
 
-**Knowledge Scout**, RAG (Retrieval-Augmented Generation) mimarisiyle çalışan, Türkçe dil desteğine sahip bir soru-cevap sistemidir. CSV veya TXT dosyalarından veri işler, vektör veritabanında saklar ve kullanıcının sorularına yapay zeka destekli yanıtlar üretir. Sistemin en önemli özelliklerinden biri, daha doğru sonuçlar için **niyet sınıflandırma** yapması ve performans takibi için **dahili bir sayaç** içermesidir.
+<img src="assets/film_buddy_logo.png" alt="Film Buddy Logo" width="200"/>
+
+**Film Buddy**, doğal bir sohbet deneyimiyle size en uygun film ve dizi önerilerini sunmak için tasarlanmış akıllı bir asistandır. Ruh halinize, tercihlerinize ve geçmiş sohbetlerinize göre kişiselleştirilmiş öneriler yapar.
+
+### 🤖 Nasıl Çalışır?
+
+Film Buddy, sizinle tıpkı bir arkadaş gibi sohbet ederek film ve dizi önerileri sunar. Aklınızdaki bir türü, ruh halinizi veya sadece "ne izlesem?" sorunuzu yöneltmeniz yeterli.
+
+* **Doğal Konuşma:** Film Buddy, "selam", "teşekkürler" gibi ifadeleri anlar ve buna göre yanıt verir.
+* **Bağlamı Hatırlama:** Sizinle yaptığı sohbeti hatırlayarak, "o zaman başka bir tane öner" gibi devam cümlelerini bile kolayca anlar.
+* **Kişiselleştirilmiş Öneriler:** Yaptığı öneriler, sizin tercihlerinize ve aradığınız türe göre şekillenir.
 
 ⚙️ Özellikler
+- **Hibrit Arama (Ensemble Retriever):** Hem BM25 (anahtar kelime tabanlı) hem de Vektör Araması (anlamsal arama) teknolojilerini kullanarak en alakalı sonuçları bulur.
+- **Doğal Niyet Sınıflandırması:** Kullanıcının amacını (öneri isteme, bilgi arama, selamlama vb.) anlar ve buna göre yanıt verir.
+- **Akıllı Sohbet Yönetimi:** Konuşma geçmişini hatırlayarak tekrarlanan soruları algılar ve bağlamı korur.
+- **Kişisel Film Rehberi:** Film ve diziler hakkında detaylı bilgilere (konu, oyuncular, yönetmen) kolayca ulaşmanızı sağlar.
 
-* **Çoklu Veri Formatı Desteği:** `.csv` ve `.txt` dosyalarını okuyabilir.
-* **Akıllı Niyet Sınıflandırma:** Kullanıcının amacını (`öneri`, `arama`, `gerçek` gibi) analiz ederek daha odaklı ve isabetli yanıtlar sağlar.
-* **LLM Kullanım Sayacı:** Her LLM çağrısını sayarak sistemin performansını ve maliyetini takip etmenize olanak tanır.
-* **LangChain Entegrasyonu:** Doküman işleme, parçalara ayırma ve tüm RAG zincirini yönetmek için kullanılır.
-* **HuggingFace Embeddings:** Verileri vektörlere dönüştürerek hızlı ve alakalı arama yapılmasını sağlar.
-* **ChromaDB:** Vektörleri kalıcı olarak saklayan hafif ve etkili bir veritabanıdır.
-* **EnsembleRetriever:** Hem anlamsal (Chroma) hem de anahtar kelime tabanlı (BM25) aramayı birleştirerek sonuçların kalitesini artırır.
-* **Esnek LLM Yapısı:** Ücretsiz modellere erişim sağlayan **Gpt4FreeLLM** ve OpenAI API'si ile çalışan **CustomLLM** seçenekleri bulunur.
-* **Sohbet Geçmişi Yönetimi:** Diyalog boyunca bağlamı korur ve istenildiğinde geçmişi temizleme komutu sunar.
-* **Tam Etkileşimli Kullanım:** Komut satırı arayüzü sayesinde kolay ve hızlı bir deneyim sunar.
+### 🛠️ Kullanılan Teknolojiler
+
+* **Python:** Projenin tüm backend mantığı Python ile yazılmıştır.
+* **Flask:** Hafif ve hızlı bir framework olarak, arka uç ve ön uç arasındaki iletişimi sağlar.
+* **LangChain:** RAG (Retrieval-Augmented Generation) sistemini kurmak ve dil modelleriyle verimli bir şekilde etkileşim kurmak için kullanılmıştır.
+* **Sentence Transformers:** Metinleri anlamsal olarak anlamlı vektörlere dönüştürmek için kullanılan embedding modelidir.
+* **ChromaDB:** Vektör veritabanı olarak, film ve dizi verilerinin hızlı aranmasını sağlar.
+* **HTML, CSS, JavaScript:** Kullanıcı dostu ve interaktif sohbet arayüzünü oluşturmak için kullanılmıştır.
 
 📂 Proje Yapısı
 
 ```
-knowledge-scout/
+film-buddy/
 │
-├── data_handler.py      # Veri yükleme ve Doküman oluşturma
-├── llm_model.py         # LLM'leri yönetir ve sayaç içerir
-├── counter.py           # Performans metriklerini takip eden Counter sınıfı
-├── rag_system.py        # RAG hattını ve niyet sınıflandırma mantığını barındırır
-├── main.py              # Uygulamanın ana giriş noktası
-├── requirements.txt     # Proje bağımlılıkları
+├── classifiers/            # Niyet sınıflandırma modeli ve kodları
+│   ├── __init__.py
+│   └── sentence_transformer_classifier.py
+├── data_handler.py        # Veri yükleme & doküman oluşturma
+├── llm_model.py           # LLM yönetimi & sayaç
+├── counter.py             # Performans metriği
+├── rag_system.py          # RAG pipeline & niyet sınıflandırma
+├── main.py                # Ana giriş noktası
+├── requirements.txt       # Bağımlılıklar
+├── static/                 # HTML/CSS/JS gibi statik web dosyaları
+│   ├── css/
+│   ├── js/
+├── templates/              # Flask için HTML şablonları
+│   └── index.html
+├── .gitignore             # Gereksiz dosyaları hariç tutar
+├── .github/
+│   ├── ISSUE_TEMPLATE/    # Yeni issue şablonları
+│   └── PULL_REQUEST_TEMPLATE.md
 └── doc/
-    └── n_movies.csv     # Örnek veri dosyası
+    └── n_movies.csv       # Örnek veri seti
 ```
 
 🛠 Kurulum
 
 1. **Projeyi klonlayın:**
 ```bash
-git clone https://github.com/zeynepcagil/knowledge-scout.git
-cd knowledge-scout
+git clone https://github.com/zeynepcagil/FilmBuddy.git
+cd film-buddy
 ```
 
 2. **Gereklilikleri yükleyin:**
 ```bash
 pip install -r requirements.txt
-```
-
-3. **(İsteğe Bağlı) OpenAI API anahtarınızı ayarlayın:** `CustomLLM` kullanmak isterseniz `main.py` içindeki ilgili satırı güncelleyin.
-```python
-openai_api_token = "SİZİN_API_ANAHTARINIZ"
 ```
 
 🚀 Kullanım
@@ -58,74 +77,25 @@ python main.py
 ```
 
 2. **Kendi verinizi kullanmak için:** `main.py` dosyasındaki `csv_path` değişkenini kendi `.csv` veya `.txt` dosyanızın yoluna göre değiştirin.
-3. **Komutlar:**
-   * `q`: Programdan çıkış yapar.
-   * `temizle`: Sohbet geçmişini sıfırlar.
-   * Diğer tüm girdiler sisteme soru olarak gönderilir.
 
 📌 Örnek Kullanım
 
-```bash
-Sorunuzu giriniz: film öner
-Asistan: Harika! Bir film/dizi önerisi arıyorsunuz. Nasıl bir türde istersiniz? Mesela, 'aksiyon filmi' ya da 'romantik komedi' gibi.
---- LLM çağrı sayısı: 1
-Sorunuzu giriniz: romantik komedi
-Asistan: 2018'den sonra çıkan romantik komediler arasında ne tür bir konu arıyorsunuz?
---- LLM çağrı sayısı: 2
-```
 
----
+### 🤖 Nasıl Çalışır?
 
-## Detaylı Kullanım Örneği
+Film Buddy, sizinle tıpkı bir arkadaş gibi sohbet ederek film ve dizi önerileri sunar. Aklınızdaki bir türü, ruh halinizi veya sadece "ne izlesem?" sorunuzu yöneltmeniz yeterli.
 
-```
-New g4f version available: 0.6.0.2 (current: 0.6.0.1) | pip install -U g4f
+![Ekran Görüntüsü 1](screenshots/screenshots-1.png)
+Film Buddy'yi tanıyın! Basit bir merhaba ile sohbeti başlatın ve ruh halinizi paylaşın. Bot, önerilerini anında size göre kişiselleştirir.*
 
-Sorunuzu giriniz: canım sıkkın bana film öner
-Debug - Yeniden yazılan sorgu: movies
-Asistan: Hangi tür filmlerden hoşlanırsınız?
----
-Toplam LLM çağrısı: 1
-Toplam token kullanımı: 705 (Giriş: 594, Çıkış: 111)
+![Ekran Görüntüsü 2](screenshots/screenshots-2.png)
+*Konuşmanın Bağlamını Anlar: "Benzer film önerisi" veya "konusu ne?" gibi soruları, önceki konuşmanıza göre doğru şekilde yanıtlar.*
 
-Sorunuzu giriniz: komedi filmlerinden hoşlanırım
-Debug - Yeniden yazılan sorgu: comedy movies
-Asistan: Bağlamda belirtilen bilgilere göre, komedi türünde iki film bulunmaktadır:
-1. **Jim Gaffigan: Cinco**  
-   - **Yıl:** 2017  
-   - **Tür:** Komedi  
-   - **Süre:** 73 dakika  
-   - **Rating:** 7.1  
-2. **The Hall: Honoring the Greats of Stand-Up**  
-   - **Yıl:** 2022  
-   - **Tür:** Komedi  
-   - **Süre:** 70 dakika  
-   - **Rating:** 6.3  
-Bu filmler komedi türüne uygun olarak önerilebilir.
----
-Toplam LLM çağrısı: 3
-Toplam token kullanımı: 2845 (Giriş: 2496, Çıkış: 349)
+![Ekran Görüntüsü 3](screenshots/screenshots-4.png)
+*Konuşmanın Bağlamını Anlar: "Benzer film önerisi" veya "konusu ne?" gibi soruları, önceki konuşmanıza göre doğru şekilde yanıtlar.*
 
-Sorunuzu giriniz: the hallın konusu ne
-Debug - Yeniden yazılan sorgu: The Hall: Honoring the Greats of Stand-Up plot
-Asistan: "The Hall: Honoring the Greats of Stand-Up" filminin konusu, stand-up komedi alanında büyük başarılar elde etmiş isimleri onurlandırmak ve komedi severleri bir araya getirmek üzerine kuruludur. Film, bu alanda öne çıkan komedyenlerin katkılarını kutlar ve izleyicilere bir kutlama atmosferi sunar.
----
-Toplam LLM çağrısı: 6
-Toplam token kullanımı: 5747 (Giriş: 5188, Çıkış: 559)
-
-Sorunuzu giriniz: puanı kaç
-Debug - Yeniden yazılan sorgu: The Hall: Honoring the Greats of Stand-Up rating
-Asistan: "The Hall: Honoring the Greats of Stand-Up" filminin ratingi 6.3'tür.
----
-Toplam LLM çağrısı: 9
-Toplam token kullanımı: 8684 (Giriş: 7990, Çıkış: 694)
-
-Sorunuzu giriniz: q
-Uygulamadan çıkılıyor.
-Process finished with exit code 0
-```
-
----
+![Ekran Görüntüsü 4](screenshots/screenshots-3.png)
+*Sadece verdiğiniz bağlama bağımlı kalır.*
 
 🤝 Katkıda Bulunma
 

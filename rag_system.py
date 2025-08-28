@@ -103,22 +103,23 @@ class RagSystem:
 
     def classify_intent(self, query: str) -> Dict[str, any]:
         """
-        GELİŞTİRİLDİ: Niyet sınıflandırmasını daha güvenilir hale getirir.
+        Kullanıcının sorgusunun niyetini (öneri, arama, selamlama vb.) belirler.
+        Özel anahtar kelimelerle doğrudan eşleşme yaparak ve Sentence Transformer
+        modelini kullanarak daha güvenilir bir sınıflandırma yapar.
         """
         query_lower = query.lower()
 
-        # Filmlere özel alt-türleri kontrol et ve doğrudan recommendation döndür
+        # Doğrudan eşleşen anahtar kelimelerle hızlı sınıflandırma
         special_film_keywords = ['aşçılık', 'yemek', 'şef', 'futbol', 'voleybol', 'distopya', 'uzay']
         if any(keyword in query_lower for keyword in special_film_keywords):
             return {'intent': 'recommendation', 'confidence': 1.0, 'needs_clarification': False}
 
-        # Look-up için anahtar kelime kontrolü
         lookup_keywords = ['oyuncu', 'oynuyor', 'konusu', 'puan', 'rating', 'yönetmen', 'yöneten', 'yıl', 'ne zaman',
                            'ne hakkında']
         if any(keyword in query_lower for keyword in lookup_keywords):
             return {'intent': 'lookup', 'confidence': 0.9, 'needs_clarification': False}
 
-        # Diğer niyetler için Sentence Transformer kullan
+        # Daha sonra Sentence Transformer ile semantik sınıflandırma
         results = []
         for intent, examples in self.intent_examples.items():
             self.classifier.set_labels(examples)
@@ -150,7 +151,11 @@ class RagSystem:
         }
 
     def initialize_pipeline(self):
-        """RAG hattını kurar ve LLM ile entegrasyonu sağlar."""
+        """
+        RAG (Retrieval-Augmented Generation) hattını kurar.
+        Bu fonksiyon, embedding modelini yükler, ChromaDB'yi hazırlar
+        ve birleşik (Ensemble) bir retriever oluşturur.
+        """
         print("Sistem başlatılıyor...")
         device = "cuda" if os.system("nvidia-smi") == 0 else "cpu"
         print(f"Embedding modeli yükleniyor... (device={device})")
@@ -260,7 +265,8 @@ class RagSystem:
 
     def _check_repeated_question(self, query: str) -> Dict:
         """
-        Düzeltildi: Tekrarlanan soruları daha güvenilir şekilde kontrol eder.
+        Kullanıcının aynı soruyu tekrar edip etmediğini kontrol eder.
+        Sohbet bağlamını kullanarak tekrarlanan sorguları yakalar.
         """
         query_normalized = query.lower().strip()
         normalized_variants = {
@@ -341,8 +347,8 @@ class RagSystem:
 
     def _extract_film_context(self, response_text: str):
         """
-        GELİŞTİRİLDİ: Modelin yanıtından film/dizi adını daha güvenilir şekilde çıkarır
-        ve conversation_state'e kaydeder.
+               Modelin yanıtından film/dizi adını çıkarır ve sohbet bağlamına kaydeder.
+               Bu, sonraki soruların (örn. "konusu ne?") doğru filme yönlendirilmesini sağlar.
         """
         # Önce ** işaretleri arasındaki metni ara (en güvenilir yöntem)
         match = re.search(r"\*\*(.+?)\*\*", response_text)
@@ -571,8 +577,8 @@ class RagSystem:
 
     def ask(self, query: str) -> Dict:
         """
-        Kullanıcının sorgusunu işler, niyetine göre yanıt verir.
-        Bu versiyon, film bulunamadığında daha iyi yanıt verir.
+        Kullanıcının sorgusunu niyetine göre işler ve uygun bir yanıt döndürür.
+        Bu ana metod, tüm alt fonksiyonları yönetir.
         """
         if not self.qa_chain:
             return {"result": "Sistem şu an hazır değil, lütfen bekleyin."}

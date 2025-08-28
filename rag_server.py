@@ -1,4 +1,4 @@
-import warnings
+
 from flask import Flask, request, jsonify, render_template
 from data_handler import DataLoader
 from llm_model import Gpt4FreeLLM
@@ -28,9 +28,6 @@ class RAGServer:
 
         if not documents:
             print("Dokümanlar yüklenemediği için işlem sonlandırıldı.")
-            # Bir web sunucusunu durdurmak için daha uygun bir yol
-            # Ancak burada `None` döndürmek, sonraki hatalara yol açabilir.
-            # En iyisi, Flask uygulamasının hata vermesi için bir istisna fırlatmak
             raise Exception("Dokümanlar yüklenemedi.")
 
         llm = Gpt4FreeLLM()

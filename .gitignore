@@ -1,0 +1,24 @@
+# Python önbellek ve derleme çıktıları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Veritabanı ve log dosyaları
+chroma_db_bge_csv/
+*.log
+
+# İşletim sistemi ve IDE dosyaları
+.DS_Store
+.idea/
+.vscode/
+
+# Jupyter Notebook çıktıları
+.ipynb_checkpoints
+
+# Veri dosyaları
+data/
